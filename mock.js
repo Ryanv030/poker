@@ -1,6 +1,6 @@
 const currentHand = {
-  playersCards: ['5S', '6D'],
-  communityCards: ['KH', 'TD', '2C', '3C', '4S'],
+  playersCards: ['3H', 'KH'],
+  communityCards: ['AH', '4H', 'QH', 'TC', 'JS'],
 };
 
 const cardMap = {
@@ -19,20 +19,20 @@ const cardMap = {
   2: 1,
 };
 
-const pairCounter = {
-  A: 0,
-  K: 0,
-  Q: 0,
-  J: 0,
-  T: 0,
-  9: 0,
-  8: 0,
-  7: 0,
-  6: 0,
-  5: 0,
-  4: 0,
-  3: 0,
-  2: 0,
+const cardCounter = {
+  A: [],
+  K: [],
+  Q: [],
+  J: [],
+  T: [],
+  9: [],
+  8: [],
+  7: [],
+  6: [],
+  5: [],
+  4: [],
+  3: [],
+  2: [],
 };
 
 const getKicker = (hand) => {
@@ -65,89 +65,104 @@ const getSortedHand = (hand) => {
   });
 };
 
-const twoPair = (countedHand) => {
-  // find if there are two cards  with 2 value
-  // if there are then you need to find the value for the top pair
+const twoPair = (pairCounter) => {
   let counter = 0;
   let topPairValue = 0;
+  let cards = [];
 
-  Object.entries(countedHand).forEach((c) => {
-    if (c[1] === 2) {
+  Object.values(pairCounter).forEach((c) => {
+    if (c.length === 2) {
       counter += 1;
 
-      const pairValue = cardMap[c[0]] * 2;
+      const pairValue = c.reduce((acc, cur) => {
+        acc += cardMap[cur[0]];
+        return acc;
+      }, 0);
+
       if (pairValue > topPairValue) {
         topPairValue = pairValue;
       }
+
+      cards.push(c);
     }
   });
 
-  return { hasTwoPair: counter === 2, twoPairHandTotal: topPairValue };
+  return { hasTwoPair: counter >= 2, twoPairHandTotal: topPairValue, cards };
 };
 
 const calcKinds = (hand) => {
-  const cardCounter = { ...pairCounter };
+  const pairCounter = { ...cardCounter };
 
   hand.forEach((card) => {
     const c = card.split('')[0];
-    cardCounter[c] += 1;
+    pairCounter[c].push(card);
   });
 
-  const hasPairOrMore = !!Object.values(cardCounter).find((v) => v >= 2);
+  const hasPairOrMore = !!Object.values(pairCounter).find((c) => c.length >= 2);
 
   if (!hasPairOrMore) return { hasKind: false };
-  1;
-  let handType = '';
+
+  let kindType = '';
   let handTotal = 0;
+  let cards = [];
 
-  Object.entries(cardCounter).forEach((c) => {
-    if (c[1] === 4) {
-      handType = 'four-kind';
-      handTotal = cardMap[c[0]] * 4;
+  Object.values(pairCounter).forEach((c) => {
+    if (kindType === 'four-kind') return;
 
+    if (c.length === 4) {
+      kindType = 'four-kind';
+      handTotal = c.reduce((acc, cur) => {
+        acc += cardMap[cur[0]];
+        return acc;
+      }, 0);
+      cards = c;
       return;
     }
 
-    if (c[1] === 3) {
-      handType = 'three-kind';
-      handTotal = cardMap[c[0]] * 3;
-
+    if (c.length === 3) {
+      kindType = 'three-kind';
+      handTotal = c.reduce((acc, cur) => {
+        acc += cardMap[cur[0]];
+        return acc;
+      }, 0);
+      cards = c;
       return;
     }
 
-    if (c[1] === 2) {
-      handType = 'pair';
-      handTotal = cardMap[c[0]] * 2;
+    if (kindType === 'three-kind') return;
 
+    if (c.length === 2) {
+      kindType = 'pair';
+      handTotal = c.reduce((acc, cur) => {
+        acc += cardMap[cur[0]];
+        return acc;
+      }, 0);
+      cards = c;
       return;
     }
   });
 
-  const { hasTwoPair, twoPairHandTotal } = twoPair(cardCounter);
+  if (kindType !== ('three-kind' || 'four-kind')) {
+    const {
+      hasTwoPair,
+      twoPairHandTotal,
+      cards: twoPairCards,
+    } = twoPair(pairCounter);
 
-  if (handType === 'pair' && hasTwoPair) {
-    handType = 'two-pair';
-    handTotal = twoPairHandTotal;
+    if (hasTwoPair) {
+      kindType = 'two-pair';
+      handTotal = twoPairHandTotal;
+      cards = twoPairCards;
+    }
   }
 
-  console.log({ handType, handTotal });
-  return { hasKind: true, handType, handTotal };
-
-  // console.log({ handType, handTotal });
-  /**
-   * How should I hand this case?
-   * Do I want to count pairs, two pairs, and trips in this function?
-   *
-   * If so what should I return?
-   * {
-   *  handType: 'pair' | 'two-pair' | 'three-kind' | 'four-kind'
-   *  handTotal: number<add up the card totals to compare against other hands>
-   *
-   * }
-   */
+  return { hasKind: true, kindType, handTotal, cards, pairCounter };
 };
 
 const calcStraight = (hand) => {
+  // do I need to dedupe this, yes I do  but then how do I handle the straight flush case?
+  // I need to take aces as low cards into consideration for straights
+  // console.log({ hand });
   let consecutiveCards = [];
   let lastCard = 0;
 
@@ -167,29 +182,181 @@ const calcStraight = (hand) => {
 
   let hasStraight = false;
   let handTotal = 0;
+  let cards = [];
 
   if (consecutiveCards.length === 5) {
     hasStraight = true;
     handTotal = consecutiveCards.reduce((acc, card) => {
+      cards.push(card);
       acc += cardMap[card.split('')[0]];
       return acc;
     }, 0);
   }
 
-  return { hasStraight, handTotal };
+  return { hasStraight, handTotal, cards };
+};
+
+const calcFlush = (hand) => {
+  const flushCounter = {
+    H: [],
+    C: [],
+    D: [],
+    S: [],
+  };
+
+  hand.forEach((c) => {
+    const card = c.split('');
+    flushCounter[card[1]].push(c);
+  });
+
+  let hasFlush = false;
+  let handTotal = 0;
+  let cards = [];
+
+  for (const suit in flushCounter) {
+    if (flushCounter[suit].length >= 5) {
+      hasFlush = true;
+      handTotal = flushCounter[suit].reduce((acc, card) => {
+        const cardValue = cardMap[card.split('')[0]];
+
+        cards.push(card);
+        acc += cardValue;
+        return acc;
+      }, 0);
+    }
+  }
+
+  return { hasFlush, handTotal, cards };
+};
+
+const calcFullHouse = (pairCounter, kindType, overCards) => {
+  if (kindType !== 'three-kind') return { hasFullHouse: false };
+
+  let underCards = [];
+  Object.values(pairCounter).forEach((cardSet) => {
+    if (cardSet.length === 2) {
+      underCards = cardSet;
+    }
+  });
+
+  const hasFullHouse = overCards.length === 3 && underCards.length === 2;
+
+  let overCardsValue = 0;
+  let underCardsValue = 0;
+
+  if (hasFullHouse) {
+    overCardsValue = overCards.reduce((acc, cur) => {
+      acc += cardMap[cur[0]];
+      return acc;
+    }, 0);
+
+    underCardsValue = underCards.reduce((acc, cur) => {
+      acc += cardMap[cur[0]];
+      return acc;
+    }, 0);
+  }
+  return { hasFullHouse, overCardsValue, underCardsValue };
+};
+
+const calcStraightFlush = (hasStraight, straightCards) => {
+  if (!hasStraight) return { hasStraightFlush: false, hasRoyalFlush: false };
+
+  let counter = 0;
+  let lastSuit = '';
+  let royalCounter = 0;
+  const royals = ['T', 'J', 'Q', 'K', 'A'];
+
+  straightCards.forEach((card, idx) => {
+    const splitCard = card.split('');
+    const suit = splitCard[1];
+    const c = splitCard[0];
+
+    if (suit === lastSuit || idx === 0) {
+      counter += 1;
+    }
+
+    if (royals.indexOf(c) !== -1) {
+      royalCounter += 1;
+    }
+
+    lastSuit = suit;
+  });
+
+  const hasStraightFlush = counter === 5 && royalCounter !== 5;
+  const hasRoyalFlush = counter === 5 && royalCounter === 5;
+
+  return { hasStraightFlush, hasRoyalFlush };
+};
+const calcAlertnateStraight = (hand) => {
+  console.log({ hand });
+  hand.reduce(
+    (acc, fullCard, idx) => {
+      const splitCard = fullCard.split('');
+      const card = splitCard[0];
+      console.log(cardMap[card]);
+      // console.log({ card, lastCard: cardMap[acc.lastCard] });
+      // const cardDifference = cardMap[card] - cardMap[acc.lastCard];
+      // console.log({ cardDifference });
+
+      // ===================================
+      if (card === acc.lastCard) {
+        acc.cards.push(card);
+      }
+
+      if (cardMap[card] - cardMap[acc.lastCard]) acc.lastCard = card;
+      return acc;
+    },
+    {
+      lastCard: [],
+      straightCounter: [],
+      cards: [],
+    }
+  );
 };
 
 const determineResult = (h) => {
+  console.time('start');
   const hand = [...h.playersCards, ...h.communityCards];
-  const kicker = getKicker(h);
-
-  const highCard = getHighCard(hand);
   const sortedHand = getSortedHand(hand);
-  const { hasKind } = calcKinds(hand);
-  const { hasStraight } = calcStraight(sortedHand);
-  console.log({ kicker, highCard, hasKind, hasStraight });
+  calcAlertnateStraight(sortedHand);
+  const kicker = getKicker(h);
+  const highCard = getHighCard(hand);
+  const { hasKind, kindType, pairCounter, cards: cardsKind } = calcKinds(hand);
+  const { hasStraight, cards: straightCards } = calcStraight(sortedHand);
+  const { hasFlush } = calcFlush(hand);
+  const { hasFullHouse } = calcFullHouse(pairCounter, kindType, cardsKind);
+  const { hasStraightFlush, hasRoyalFlush } = calcStraightFlush(
+    hasStraight,
+    straightCards
+  );
+
+  // console.log({
+  //   kicker,
+  //   highCard,
+  //   hasKind,
+  //   kindType,
+  //   hasStraight,
+  //   hasFlush,
+  //   hasFullHouse,
+  //   hasStraightFlush,
+  //   hasRoyalFlush,
+  // });
+  console.timeEnd('start');
+
+  // straightFlush
+  // royalFlush
+
+  // edge case 6 or 7 suit
+  // 6 or 7 straight
+  // sort and slice the lowest
+  // also I need to return the cards per check
+  // make this edge case check in the determine result function
+  // in fact I could just calculate the hand total based on the cards returned in the result function
+  // if there are 6 cards returned then I need to recalculate the hand total
 
   // return { result, kicker: highCard };
 };
 
 determineResult(currentHand);
+
+// Calculate this on the client then send the results through a websocket? Is that safe? Can it be spoofed? Could I hash it then unhash on the server?
